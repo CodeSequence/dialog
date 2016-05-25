@@ -1,9 +1,9 @@
 import { Observable, Observer, Subscriber } from 'rxjs';
-import { 
-        ComponentResolver, 
-        Injectable, 
-        EventEmitter, 
-        Provider, 
+import {
+        ComponentResolver,
+        Injectable,
+        EventEmitter,
+        Provider,
         ReflectiveInjector
 } from '@angular/core';
 import { OutletRegistry } from './outlet-registry';
@@ -16,20 +16,37 @@ export class DialogService {
         private _compiler: ComponentResolver,
         private _registry: OutletRegistry
     ) {}
-    
-    //TJM Is it possible to pass in default paramters for interface?
+
     open<T>(cmp: CloseableType<T>, outlet: string, options?: OpenOptions): Observable<T> {
         options = options || {};
         const outletViewContainer = this._registry.getOutlet(outlet);
         const injector = ReflectiveInjector.resolveAndCreate(options.providers || [], options.injector || outletViewContainer.injector);
-        this._compiler.resolveComponent(cmp).
-            then((comp => outletViewContainer.createComponent(comp, null, injector)));
-        
-        return new Observable<T>((subscriber: Subscriber<T>) => {
-            return () => {
-                //Unsubscribe
+
+        return Observable.of(cmp)
+          .mergeMap(cmp => this._compiler.resolveComponent(cmp))
+          .map(cmp => outletViewContainer.createComponent(cmp, null, injector))
+          .switchMap(ref => {
+            const cleanup = () => {
+              this._registry.unregister(outlet);
+              ref.destroy();
             };
-        });
+            const { close, dismiss } = ref.instance;
+            const close$ = close.take(1);
+            const dismiss$ = !!dismiss
+              ? dismiss.mergeMap(val => Observable.throw(val))
+              : Observable.empty();
+
+              return new Observable<T>((subscriber: Subscriber<T>) => {
+                const subscription = Observable.merge(close$, dismiss$)
+                  .finally(cleanup)
+                  .subscribe(subscriber);
+
+                  return () => {
+                    subscription.unsubscribe();
+                    cleanup();
+                  };
+              });
+          });
     }
 }
 
@@ -55,13 +72,13 @@ export interface CloseableType<T> {
 export interface OpenOptions {
   // Observer for the opening of the modal
   open?: Observer<boolean>;
-  
+
   // Observer for the closing of the modal. Emits on close or dismiss.
   close?: Observer<boolean>;
-  
+
   // Array of providers to be used to create the component
   providers?: any[];
-  
+
   // Injector to be used to create the component
   injector?: any;
 }

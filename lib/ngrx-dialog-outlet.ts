@@ -1,7 +1,7 @@
-import { 
+import {
     ViewContainerRef,
     Component,
-    Attribute 
+    Attribute
 } from '@angular/core';
 import { OutletRegistry } from './outlet-registry';
 
@@ -14,7 +14,9 @@ export class NGRXDialogOutlet {
     @Attribute('name') private _name: string,
     private _registry: OutletRegistry,
     private _container: ViewContainerRef
-  ) { 
+  ) { }
+
+  ngOnInit() {
     this._registry.register(this._name, this._container);
   }
 }
